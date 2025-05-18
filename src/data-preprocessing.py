@@ -69,7 +69,31 @@ mode_columns = [
     "SaleCondition"
 ]
 
-#TODO create a function that checks if a garage exists
+for col in mode_columns:
+    if house_df[col].isnull().any():
+        house_df[col].fillna(house_df[col].mode()[0], inplace=True)
 
 
+#Fill missing numerical values
+numeric_cols = house_df.select_dtypes(include=["number"]).columns
+imputer = SimpleImputer(strategy="median")
+house_df[numeric_cols] = imputer.fit_transform(house_df[numeric_cols])
+
+#Checks if garage exists
+def garage_exists(row):
+    return row["GarageType"] != "None"
+
+house_df["GarageExists"] = house_df.apply(garage_exists, axis=1)
+
+#One-hot encoded categorical variables
+house_df = pd.get_dummies(house_df)
+
+#Drop unnecessary columns
+house_df.drop(columns=["Id"], inplace=True)
+
+#Scale numerical features
+scaler = StandardScaler()
+house_df[numeric_cols] = scaler.fit_transform(house_df[numeric_cols])
+
+#Check for missing values
 check_missing_values(house_df)
