@@ -9,12 +9,12 @@ df = pd.read_csv('../dataset/house-price/processed-data/train_processed.csv')
 x = df.drop(columns=["SalePrice"])
 y = df["SalePrice"]
 
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.2, random_state=42)
 
 model = LinearRegression()
-model.fit(X_train, y_train)
+model.fit(x_train, y_train)
 
-y_pred = model.predict(X_val)
+y_pred = model.predict(x_val)
 
 mae = mean_absolute_error(y_val, y_pred)
 print(f"Validation MAE: {mae:.2f}")

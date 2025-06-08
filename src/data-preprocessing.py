@@ -1,5 +1,6 @@
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+import pickle
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 
 pd.set_option('display.max_columns', None)
@@ -22,7 +23,9 @@ mode_columns = [
 def garage_exists(row):
     return row["GarageType"] != "None"
 
-def preprocess(df, imputer=None, scaler=None, is_train=True):
+def preprocess(df, imputer=None, scaler=None, encoder=None, is_train=True):
+    df = df.copy()
+
     df[none_cols] = df[none_cols].fillna("None")
 
     for col in mode_columns:
@@ -31,26 +34,44 @@ def preprocess(df, imputer=None, scaler=None, is_train=True):
 
     df["GarageExists"] = df.apply(garage_exists, axis=1)
 
+    # Save Id for later if needed
     if "Id" in df.columns:
         df.drop(columns=["Id"], inplace=True)
 
-    numeric_cols = df.select_dtypes(include=["number"]).columns
+    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
 
+    # Imputer
     if is_train:
         imputer = SimpleImputer(strategy="median")
         df[numeric_cols] = imputer.fit_transform(df[numeric_cols])
     else:
         df[numeric_cols] = imputer.transform(df[numeric_cols])
 
-    df = pd.get_dummies(df)
+    # Categorical columns
+    categorical_cols = df.select_dtypes(include=["object", "bool"]).columns.tolist()
 
+    if is_train:
+        encoder = OneHotEncoder(handle_unknown="ignore")
+        cat_encoded = encoder.fit_transform(df[categorical_cols])
+    else:
+        cat_encoded = encoder.transform(df[categorical_cols])
+
+    cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(categorical_cols), index=df.index)
+
+    # Drop original categorical columns
+    df.drop(columns=categorical_cols, inplace=True)
+
+    # Combine numeric + encoded categorical
+    df = pd.concat([df, cat_encoded_df], axis=1)
+
+    # Scaler
     if is_train:
         scaler = StandardScaler()
         df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
     else:
         df[numeric_cols] = scaler.transform(df[numeric_cols])
 
-    return df, imputer, scaler
+    return df, imputer, scaler, encoder
 
 # Load datasets
 train_raw = pd.read_csv("../dataset/house-price/raw-data/train.csv")
@@ -61,14 +82,24 @@ y_train = train_raw["SalePrice"]
 train_raw.drop(columns=["SalePrice"], inplace=True)
 
 # Preprocess both
-train_processed, imputer, scaler = preprocess(train_raw, is_train=True)
-test_processed, _, _ = preprocess(test_raw, imputer=imputer, scaler=scaler, is_train=False)
+train_processed, imputer, scaler, encoder = preprocess(train_raw, is_train=True)
+test_processed, _, _, _ = preprocess(test_raw, imputer=imputer, scaler=scaler, encoder=encoder, is_train=False)
 
 # Add target column back to train
 train_processed["SalePrice"] = y_train
 
-# Save
+# Save processed datasets
 train_processed.to_csv("../dataset/house-price/processed-data/train_processed.csv", index=False)
 test_processed.to_csv("../dataset/house-price/processed-data/test_processed.csv", index=False)
+
+# Save the imputer, scaler, encoder for later use
+with open("../models/imputer.pkl", "wb") as f:
+    pickle.dump(imputer, f)
+
+with open("../models/scaler.pkl", "wb") as f:
+    pickle.dump(scaler, f)
+
+with open("../models/encoder.pkl", "wb") as f:
+    pickle.dump(encoder, f)
 
 print("Train and test sets preprocessed and saved.")
