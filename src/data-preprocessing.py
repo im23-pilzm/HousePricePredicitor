@@ -20,8 +20,10 @@ mode_columns = [
     "CentralAir", "Electrical", "KitchenQual", "Functional", "PavedDrive", "SaleType", "SaleCondition"
 ]
 
+
 def garage_exists(row):
     return row["GarageType"] != "None"
+
 
 def preprocess(df, imputer=None, scaler=None, encoder=None, is_train=True):
     df = df.copy()
@@ -47,19 +49,20 @@ def preprocess(df, imputer=None, scaler=None, encoder=None, is_train=True):
     else:
         df[numeric_cols] = imputer.transform(df[numeric_cols])
 
-    # Categorical columns
-    categorical_cols = df.select_dtypes(include=["object", "bool"]).columns.tolist()
+    # One-hot encode categorical features
+    categorical_cols = df.select_dtypes(include=["object"]).columns.tolist()
 
     if is_train:
-        encoder = OneHotEncoder(handle_unknown="ignore")
+        encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
         cat_encoded = encoder.fit_transform(df[categorical_cols])
     else:
         cat_encoded = encoder.transform(df[categorical_cols])
 
-    cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(categorical_cols), index=df.index)
+    cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(categorical_cols),
+                                  index=df.index)
 
     # Drop original categorical columns
-    df.drop(columns=categorical_cols, inplace=True)
+    df.drop(columns=categorical_cols, inplace=True, errors='ignore')
 
     # Combine numeric + encoded categorical
     df = pd.concat([df, cat_encoded_df], axis=1)
@@ -72,6 +75,7 @@ def preprocess(df, imputer=None, scaler=None, encoder=None, is_train=True):
         df[numeric_cols] = scaler.transform(df[numeric_cols])
 
     return df, imputer, scaler, encoder
+
 
 # Load datasets
 train_raw = pd.read_csv("../dataset/house-price/raw-data/train.csv")
@@ -101,5 +105,9 @@ with open("../models/scaler.pkl", "wb") as f:
 
 with open("../models/encoder.pkl", "wb") as f:
     pickle.dump(encoder, f)
+
+# Save columns for later use in prediction
+with open("../models/feature_columns.pkl", "wb") as f:
+    pickle.dump(train_processed.drop(columns=["SalePrice"]).columns.tolist(), f)
 
 print("Train and test sets preprocessed and saved.")
